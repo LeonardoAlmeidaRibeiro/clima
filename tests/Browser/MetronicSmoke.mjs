@@ -1,0 +1,41 @@
+import fs from 'node:fs/promises';
+import assert from 'node:assert/strict';
+// Requires the local PHP preview on port 8092 and a Chromium CDP session on 9233.
+const pages = await (await fetch('http://127.0.0.1:9233/json')).json();
+const page=pages.find(page=>page.type==='page'&&page.url.includes(':8092'));
+const ws = new WebSocket(page.webSocketDebuggerUrl);
+await new Promise((resolve,reject)=>{ws.onopen=resolve;ws.onerror=reject;});
+let id=0;const pending=new Map();const errors=[];
+ws.onmessage=({data})=>{const message=JSON.parse(data);if(message.id){const waiter=pending.get(message.id);pending.delete(message.id);message.error?waiter.reject(message.error):waiter.resolve(message.result);}else if(message.method==='Runtime.exceptionThrown')errors.push(message.params.exceptionDetails);};
+function send(method,params={}){return new Promise((resolve,reject)=>{const current=++id;pending.set(current,{resolve,reject});ws.send(JSON.stringify({id:current,method,params}));});}
+async function evaluate(expression){const result=await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(result.exceptionDetails)throw new Error(JSON.stringify(result.exceptionDetails));return result.result.value;}
+const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+await send('Runtime.enable');await send('Page.enable');
+await send('Emulation.setDeviceMetricsOverride',{width:1600,height:1100,deviceScaleFactor:1,mobile:false});
+errors.length=0;await send('Page.reload',{ignoreCache:true});await pause(2000);
+console.log('Runtime:',await evaluate(`JSON.stringify({bootstrap:typeof bootstrap,drawer:typeof KTDrawer,chart:!!document.querySelector('#climate-chart .apexcharts-svg'),markers:document.querySelectorAll('[data-point]').length,overflow:document.documentElement.scrollWidth>innerWidth})`));
+assert.equal(await evaluate(`document.querySelectorAll('[data-point]').length`),12);
+assert.equal(await evaluate(`!!document.querySelector('#climate-chart .apexcharts-svg')`),true);
+await evaluate(`document.querySelector('#notification-toggle').click()`);await pause(250);
+assert.equal(await evaluate(`document.querySelector('#notification-panel').classList.contains('show')`),true);
+const above=await evaluate(`(()=>{const n=document.querySelector('#notification-panel').getBoundingClientRect();return document.elementFromPoint(n.left+20,n.top+160).closest('#notification-panel')!==null})()`);
+assert.equal(above,true,'notification dropdown must render above statistics');
+let screenshot=await send('Page.captureScreenshot',{format:'png'});await fs.writeFile('storage/app/metronic-desktop.png',Buffer.from(screenshot.data,'base64'));
+await evaluate(`document.querySelector('#mark-read').click();document.querySelector('#category-filter').value='rain';document.querySelector('#category-filter').dispatchEvent(new Event('change'))`);
+assert.equal(await evaluate(`document.querySelectorAll('[data-point]').length`),3);
+await evaluate(`document.querySelector('#all-actions').click()`);
+assert.equal(await evaluate(`document.querySelectorAll('[data-action]').length`),5);
+await evaluate(`document.querySelector('[data-action]').click()`);await pause(650);
+assert.equal(await evaluate(`document.querySelector('#detail-dialog').classList.contains('show')`),true);
+await evaluate(`bootstrap.Modal.getInstance(document.querySelector('#detail-dialog')).hide()`);await pause(650);
+assert.equal(await evaluate(`document.querySelector('#detail-dialog').classList.contains('show')`),false);
+await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+await evaluate(`window.scrollTo(0,0)`);await pause(500);
+assert.equal(await evaluate(`document.documentElement.scrollWidth<=innerWidth`),true,'mobile must not overflow horizontally');
+await evaluate(`document.querySelector('#menu-toggle').click()`);await pause(400);
+assert.equal(await evaluate(`document.querySelector('#sidebar').classList.contains('drawer-on')`),true);
+await evaluate(`KTDrawer.getInstance(document.querySelector('#sidebar')).hide()`);await pause(400);
+screenshot=await send('Page.captureScreenshot',{format:'png'});await fs.writeFile('storage/app/metronic-mobile.png',Buffer.from(screenshot.data,'base64'));
+console.log('Browser exceptions:',JSON.stringify(errors));assert.equal(errors.length,0);
+console.log('PASS: desktop, notifications stacking, filters, actions, modal, mobile drawer and horizontal overflow.');
+ws.close();

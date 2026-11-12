@@ -1,0 +1,4 @@
+<div class="story-content"><span class="story-tag"><span></span> SUA VOZ FAZ A DIFERENÇA</span><h2>Sua cidade.<br>Sua voz.<br><em>Nosso futuro.</em></h2><p>Quem vive o problema também pode fazer parte da solução. Conecte sua experiência às mudanças que a cidade precisa.</p>
+        <div class="community-scene"><div class="scene-label"><i class="bi bi-geo-alt-fill" aria-hidden="true"></i> Cada relato conta</div><img src="{{ asset('images/community.svg') }}" width="400" height="220" alt="Bairro com casas, árvores e áreas verdes"><div class="scene-message"><span><i class="bi bi-check-lg" aria-hidden="true"></i></span><div><strong>Participação que transforma</strong><small>Um olhar atento. Uma cidade melhor.</small></div></div></div>
+        <div class="story-features"><span><i class="bi bi-geo-alt" aria-hidden="true"></i> Registre ocorrências</span><span><i class="bi bi-check2-circle" aria-hidden="true"></i> Acompanhe soluções</span></div>
+    </div>
